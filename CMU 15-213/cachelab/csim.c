@@ -42,8 +42,27 @@ int main(int argc, char* argv[])
                 fprintf(stderr, "Usage: %s [-t nsecs] [-n] name\n",
                         argv[0]);
                 exit(EXIT_FAILURE);
-            }
         }
+    }
+
+    if (help) {
+        fprintf(stdout,
+                "Usage: %s [-hv] -s <s> -E <E> -b <b> -t <tracefile>\n",
+                argv[0]);
+        return 0;
+    }
+
+    bool missing_or_bad =
+        set_bits <= 0 ||
+        asso <= 0 ||
+        block_bits <= 0 ||
+        filename == NULL || *filename == '\0';
+
+    if (missing_or_bad) {
+        fprintf(stderr,
+                "Usage: %s [-hv] -s <s> -E <E> -b <b> -t <tracefile>\n",
+                argv[0]);
+        exit(EXIT_FAILURE);
     }
 
     printSummary(0, 0, 0);
