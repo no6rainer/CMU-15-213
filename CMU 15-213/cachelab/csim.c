@@ -6,7 +6,34 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include <stdint.h>
+
 #include <stdbool.h>
+
+typedef struct line {
+    bool valid;
+    size_t tag;
+    size_t lru;
+} Line;
+
+typedef struct set {
+    Line *lines;
+} Set;
+
+typedef struct cache_config {
+    size_t set_bits;
+    size_t asso;
+    size_t block_bits;
+    bool verbose;
+} Cache_config;
+
+typedef struct cache {
+    Set *sets;
+    Cache_config config;
+    int hits;
+    int misses;
+    int evictions;
+} Cache;
 
 int main(int argc, char* argv[])
 {
@@ -65,6 +92,89 @@ int main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
 
-    printSummary(0, 0, 0);
+    Cache_config config = {
+        .set_bits = set_bits,
+        .asso = asso,
+        .block_bits = block_bits,
+        .verbose = verbose
+    };
+
+
+    size_t set_count = 1u << set_bits;
+    size_t line_count = (size_t)asso;
+    size_t block_size = 1u << block_bits;
+
+    Set *all_sets = calloc(set_count, sizeof(*all_sets));
+    Line *all_lines = calloc(set_count * line_count, sizeof *all_lines);
+
+    for (size_t s = 0; s < set_count; ++s) {
+        all_sets[s].lines = all_lines + s * line_count;
+    }
+
+    Cache cache = {
+        .sets = all_sets,
+        .config = config,
+        .hits = 0,
+        .misses = 0,
+        .evictions = 0
+    };
+
+    
+    FILE *fp = fopen(filename, "r");
+    if (!fp) {
+        perror("fopen");
+        exit(EXIT_FAILURE);
+    }
+
+    char line[256];
+    while (fgets(line, sizeof line, fp) != NULL) {
+        if (line[0] == 'I') {
+            continue;
+        }
+
+        char op = line[1];
+        
+        size_t addr = 0;
+        int size = 0;
+
+        sscanf(line + 3, "%zx,%d", &addr, &size);
+
+        update_cache(op, addr, cache);
+        
+        printf("op=%c addr=0x%zx\n", op, addr);
+    }
+
+    fclose(fp);
+
+    free(all_lines);
+    free(all_sets);
+
+    // printSummary(0, 0, 0);
     return 0;
+}
+
+void update_cache(char op, size_t addr, Cache cache) {
+    static size_t tick = 0;
+
+    size_t set_bits = cache.config.set_bits;
+    size_t asso = cache.config.asso;
+    size_t block_bits = cache.config.block_bits;
+
+    size_t offset = addr & (1u << block_bits - 1);
+    size_t set_index = (addr >> block_bits) & (1u << set_bits - 1);
+    size_t tag = addr >> (block_bits + set_bits);
+
+    switch (op) {
+        case 'L': 
+            for (int i = 0; i < asso; ++i) {
+                if (cache.sets[set_index].lines[i].tag == tag) {
+                    ++cache.hits;
+                    cache.sets[set_index].lines[i].lru = tick;
+                    break;
+                }
+            }
+            
+    }
+    
+    ++tick;
 }
