@@ -35,6 +35,10 @@ typedef struct cache {
     int evictions;
 } Cache;
 
+static void access_cache(size_t addr, Cache* cache);
+void update_cache(char op, size_t addr, Cache* cache);
+void printSummary(int hits, int misses, int evictions);
+
 int main(int argc, char* argv[])
 {
     int opt;
@@ -102,7 +106,7 @@ int main(int argc, char* argv[])
 
     size_t set_count = 1u << set_bits;
     size_t line_count = (size_t)asso;
-    size_t block_size = 1u << block_bits;
+    // size_t block_size = 1u << block_bits;
 
     Set *all_sets = calloc(set_count, sizeof(*all_sets));
     Line *all_lines = calloc(set_count * line_count, sizeof *all_lines);
@@ -139,7 +143,7 @@ int main(int argc, char* argv[])
 
         sscanf(line + 3, "%zx,%d", &addr, &size);
 
-        update_cache(op, addr, cache);
+        update_cache(op, addr, &cache);
         
         printf("op=%c addr=0x%zx\n", op, addr);
     }
@@ -149,32 +153,78 @@ int main(int argc, char* argv[])
     free(all_lines);
     free(all_sets);
 
-    // printSummary(0, 0, 0);
+    printSummary(cache.hits, cache.misses, cache.evictions);
     return 0;
 }
 
-void update_cache(char op, size_t addr, Cache cache) {
+static void access_cache(size_t addr, Cache* cache) {
     static size_t tick = 0;
 
-    size_t set_bits = cache.config.set_bits;
-    size_t asso = cache.config.asso;
-    size_t block_bits = cache.config.block_bits;
+    size_t set_bits = cache->config.set_bits;
+    size_t asso = cache->config.asso;
+    size_t block_bits = cache->config.block_bits;
 
-    size_t offset = addr & (1u << block_bits - 1);
-    size_t set_index = (addr >> block_bits) & (1u << set_bits - 1);
+    // size_t offset = addr & ((1u << block_bits) - 1);
+    size_t set_index = (addr >> block_bits) & ((1u << set_bits) - 1);
     size_t tag = addr >> (block_bits + set_bits);
 
-    switch (op) {
-        case 'L': 
-            for (int i = 0; i < asso; ++i) {
-                if (cache.sets[set_index].lines[i].tag == tag) {
-                    ++cache.hits;
-                    cache.sets[set_index].lines[i].lru = tick;
-                    break;
-                }
-            }
-            
+    Set* curr_set = &cache->sets[set_index];
+
+    int hit_index = -1;
+    int empty_index = -1;
+    int victim_index = 0;
+    size_t oldest = curr_set->lines[0].lru;
+
+    for (int i = 0; i < asso; ++i) {
+        Line* line = &curr_set->lines[i];
+        if (line->valid && line->tag == tag) {
+            hit_index = i;
+            break;
+        }
+        if (!line->valid && empty_index == -1) {
+            empty_index = i;
+        }
+        if (line->valid && line->lru < oldest) {
+            victim_index = i;
+            oldest = line->lru;
+        }
     }
-    
+
+    if (hit_index != -1) {
+        ++cache->hits;
+        curr_set->lines[hit_index].lru = tick;
+    } else if (empty_index != -1) {
+        ++cache->misses;
+        curr_set->lines[empty_index].valid = true;
+        curr_set->lines[empty_index].tag = tag;
+        curr_set->lines[empty_index].lru = tick;
+    } else {
+        ++cache->misses;
+        ++cache->evictions;
+        curr_set->lines[victim_index].tag = tag;
+        curr_set->lines[victim_index].lru = tick;
+    }
+
     ++tick;
 }
+
+void update_cache(char op, size_t addr, Cache* cache) {
+    switch (op) {
+        case 'L':
+            access_cache(addr, cache);
+            break;
+
+        case 'S':
+            access_cache(addr, cache);
+            break;
+
+        case 'M':
+            access_cache(addr, cache);
+            access_cache(addr, cache);
+            break;
+    }
+}
+
+// void printSummary(int hits, int misses, int evictions) {
+//     printf("hits:%d misses:%d evictions:%d\n", hits, misses, evictions);
+// }
