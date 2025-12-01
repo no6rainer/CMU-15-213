@@ -1,14 +1,11 @@
-#include "cachelab.h"
-
-#include <stdio.h>
-
 #include <getopt.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
-#include <stdint.h>
-
-#include <stdbool.h>
+#include "cachelab.h"
 
 typedef struct line {
     bool valid;
@@ -17,7 +14,7 @@ typedef struct line {
 } Line;
 
 typedef struct set {
-    Line *lines;
+    Line* lines;
 } Set;
 
 typedef struct cache_config {
@@ -28,7 +25,7 @@ typedef struct cache_config {
 } Cache_config;
 
 typedef struct cache {
-    Set *sets;
+    Set* sets;
     Cache_config config;
     int hits;
     int misses;
@@ -36,11 +33,9 @@ typedef struct cache {
 } Cache;
 
 static void access_cache(size_t addr, Cache* cache);
-void update_cache(char op, size_t addr, Cache* cache);
-void printSummary(int hits, int misses, int evictions);
+static void update_cache(char op, size_t addr, Cache* cache);
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char* argv[]) {
     int opt;
     bool help = false;
     bool verbose = false;
@@ -70,28 +65,22 @@ int main(int argc, char* argv[])
                 filename = optarg;
                 break;
             default:
-                fprintf(stderr, "Usage: %s [-t nsecs] [-n] name\n",
-                        argv[0]);
+                fprintf(stderr, "Usage: %s [-t nsecs] [-n] name\n", argv[0]);
                 exit(EXIT_FAILURE);
         }
     }
 
     if (help) {
-        fprintf(stdout,
-                "Usage: %s [-hv] -s <s> -E <E> -b <b> -t <tracefile>\n",
+        fprintf(stdout, "Usage: %s [-hv] -s <s> -E <E> -b <b> -t <tracefile>\n",
                 argv[0]);
         return 0;
     }
 
-    bool missing_or_bad =
-        set_bits <= 0 ||
-        asso <= 0 ||
-        block_bits <= 0 ||
-        filename == NULL || *filename == '\0';
+    bool missing_or_bad = set_bits <= 0 || asso <= 0 || block_bits <= 0 ||
+                          filename == NULL || *filename == '\0';
 
     if (missing_or_bad) {
-        fprintf(stderr,
-                "Usage: %s [-hv] -s <s> -E <E> -b <b> -t <tracefile>\n",
+        fprintf(stderr, "Usage: %s [-hv] -s <s> -E <E> -b <b> -t <tracefile>\n",
                 argv[0]);
         exit(EXIT_FAILURE);
     }
@@ -103,13 +92,11 @@ int main(int argc, char* argv[])
         .verbose = verbose
     };
 
-
     size_t set_count = 1u << set_bits;
     size_t line_count = (size_t)asso;
-    // size_t block_size = 1u << block_bits;
 
-    Set *all_sets = calloc(set_count, sizeof(*all_sets));
-    Line *all_lines = calloc(set_count * line_count, sizeof *all_lines);
+    Set* all_sets = calloc(set_count, sizeof(*all_sets));
+    Line* all_lines = calloc(set_count * line_count, sizeof *all_lines);
 
     for (size_t s = 0; s < set_count; ++s) {
         all_sets[s].lines = all_lines + s * line_count;
@@ -123,8 +110,7 @@ int main(int argc, char* argv[])
         .evictions = 0
     };
 
-    
-    FILE *fp = fopen(filename, "r");
+    FILE* fp = fopen(filename, "r");
     if (!fp) {
         perror("fopen");
         exit(EXIT_FAILURE);
@@ -137,15 +123,13 @@ int main(int argc, char* argv[])
         }
 
         char op = line[1];
-        
+
         size_t addr = 0;
         int size = 0;
 
         sscanf(line + 3, "%zx,%d", &addr, &size);
 
         update_cache(op, addr, &cache);
-        
-        printf("op=%c addr=0x%zx\n", op, addr);
     }
 
     fclose(fp);
@@ -154,6 +138,7 @@ int main(int argc, char* argv[])
     free(all_sets);
 
     printSummary(cache.hits, cache.misses, cache.evictions);
+
     return 0;
 }
 
@@ -164,7 +149,6 @@ static void access_cache(size_t addr, Cache* cache) {
     size_t asso = cache->config.asso;
     size_t block_bits = cache->config.block_bits;
 
-    // size_t offset = addr & ((1u << block_bits) - 1);
     size_t set_index = (addr >> block_bits) & ((1u << set_bits) - 1);
     size_t tag = addr >> (block_bits + set_bits);
 
@@ -208,7 +192,7 @@ static void access_cache(size_t addr, Cache* cache) {
     ++tick;
 }
 
-void update_cache(char op, size_t addr, Cache* cache) {
+static void update_cache(char op, size_t addr, Cache* cache) {
     switch (op) {
         case 'L':
             access_cache(addr, cache);
@@ -224,7 +208,3 @@ void update_cache(char op, size_t addr, Cache* cache) {
             break;
     }
 }
-
-// void printSummary(int hits, int misses, int evictions) {
-//     printf("hits:%d misses:%d evictions:%d\n", hits, misses, evictions);
-// }
