@@ -14,7 +14,7 @@ int is_transpose(int M, int N, int A[N][M], int B[M][N]);
 void transpose_8x8_32(int row, int col, int A[32][32], int B[32][32]);
 void transpose_8x8_diagonal_32(int row, int col, int A[32][32], int B[32][32]);
 void transpose_8x8_64(int row, int col, int A[64][64], int B[64][64]);
-void transpose_64x8(int col, int A[64][64], int B[64][64]);
+void transpose_8x8_diagonal_64(int row, int col, int A[64][64], int B[64][64]);
 
 /* 
  * transpose_submit - This is the solution transpose function that you
@@ -39,9 +39,31 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N])
     }
 
     if (M == 64) {
-        for (int i = 0; i < 8; ++i) {
-            for (int j = 0; j < 8; ++j) {
-                transpose_8x8_64(i, j, A, B);
+        for (int i = 0; i < 4; ++i) {
+            transpose_8x8_diagonal_64(i, i, A, B);
+            transpose_8x8_64(i + 1, i, A, B);
+            transpose_8x8_64(i + 2, i, A, B);
+        }
+
+        for (int i = 4; i < 8; ++i) {
+            transpose_8x8_diagonal_64(i, i, A, B);
+            transpose_8x8_64(i - 1, i, A, B);
+            transpose_8x8_64(i - 2, i, A, B);
+        }
+
+        for (int j = 0; j < 4; ++j) {
+            for (int i = 0; i < 8; ++i) {
+                if (i > j + 2 || i < j) {
+                    transpose_8x8_64(i, j, A, B);
+                }
+            }
+        }
+
+        for (int j = 4; j < 8; ++j) {
+            for (int i = 0; i < 8; ++i) {
+                if (i > j || i < j - 2) {
+                    transpose_8x8_64(i, j, A, B);
+                }
             }
         }
     }
@@ -167,56 +189,192 @@ void transpose_8x8_64(int row, int col, int A[64][64], int B[64][64]) {
 
 }
 
-void transpose_64x8(int col, int A[64][64], int B[64][64]) {
+void transpose_8x8_diagonal_64(int row, int col, int A[64][64], int B[64][64]) {
     int v0, v1, v2, v3, v4, v5, v6, v7;
-    for (int i = 0; i < 56; ++i) {
-        v0 = A[i][col * 8 + 0];
-        v1 = A[i][col * 8 + 1];
-        v2 = A[i][col * 8 + 2];
-        v3 = A[i][col * 8 + 3];
-        v4 = A[i][col * 8 + 4];
-        v5 = A[i][col * 8 + 5];
-        v6 = A[i][col * 8 + 6];
-        v7 = A[i][col * 8 + 7];
 
-        B[col * 8 + 0][i] = v0;
-        B[col * 8 + 1][i] = v1;
-        B[col * 8 + 2][i] = v2;
-        B[col * 8 + 3][i] = v3;
+    if (row < 4) {
+        for (int i = 0; i < 4; ++i) {
+            v0 = A[row * 8 + i][col * 8 + 0];
+            v1 = A[row * 8 + i][col * 8 + 1];
+            v2 = A[row * 8 + i][col * 8 + 2];
+            v3 = A[row * 8 + i][col * 8 + 3];
 
-        B[col * 8 + 4][i + 8] = v4;
-        B[col * 8 + 5][i + 8] = v5;
-        B[col * 8 + 6][i + 8] = v6;
-        B[col * 8 + 7][i + 8] = v7;
+            v4 = A[row * 8 + i][col * 8 + 4];
+            v5 = A[row * 8 + i][col * 8 + 5];
+            v6 = A[row * 8 + i][col * 8 + 6];
+            v7 = A[row * 8 + i][col * 8 + 7];
 
-        if (i % 8 == 7) {
-            for (int j = i - 7; j < i + 1; ++j) {
-                B[col * 8 + 4][j] = B[col * 8 + 4][j + 8];
-                B[col * 8 + 5][j] = B[col * 8 + 5][j + 8];
-                B[col * 8 + 6][j] = B[col * 8 + 6][j + 8];
-                B[col * 8 + 7][j] = B[col * 8 + 7][j + 8];
-            }      
-        }
-    }
+            B[col * 8 + 0][row * 8 + i + 8] = v0;
+            B[col * 8 + 1][row * 8 + i + 8] = v1;
+            B[col * 8 + 2][row * 8 + i + 8] = v2;
+            B[col * 8 + 3][row * 8 + i + 8] = v3;
 
-    for (int i = 56; i < 60; ++i) {
-        for (int j = col * 8; j < col * 8 + 4; ++j) {
-            B[j][i] = A[i][j];
+            B[col * 8 + 0][row * 8 + i + 12] = v4;
+            B[col * 8 + 1][row * 8 + i + 12] = v5;
+            B[col * 8 + 2][row * 8 + i + 12] = v6;
+            B[col * 8 + 3][row * 8 + i + 12] = v7;
         }
-    }
-    for (int i = 56; i < 60; ++i) {
-        for (int j = col * 8 + 4; j < col * 8 + 8; ++j) {
-            B[j][i] = A[i][j];
+
+        for (int i = 0; i < 4; ++i) {
+            v0 = A[row * 8 + i + 4][col * 8 + 0];
+            v1 = A[row * 8 + i + 4][col * 8 + 1];
+            v2 = A[row * 8 + i + 4][col * 8 + 2];
+            v3 = A[row * 8 + i + 4][col * 8 + 3];
+
+            v4 = A[row * 8 + i + 4][col * 8 + 4];
+            v5 = A[row * 8 + i + 4][col * 8 + 5];
+            v6 = A[row * 8 + i + 4][col * 8 + 6];
+            v7 = A[row * 8 + i + 4][col * 8 + 7];
+
+            B[col * 8 + 0][row * 8 + i + 16] = v0;
+            B[col * 8 + 1][row * 8 + i + 16] = v1;
+            B[col * 8 + 2][row * 8 + i + 16] = v2;
+            B[col * 8 + 3][row * 8 + i + 16] = v3;
+
+            B[col * 8 + 0][row * 8 + i + 20] = v4;
+            B[col * 8 + 1][row * 8 + i + 20] = v5;
+            B[col * 8 + 2][row * 8 + i + 20] = v6;
+            B[col * 8 + 3][row * 8 + i + 20] = v7;
         }
-    }
-    for (int i = 60; i < 64; ++i) {
-        for (int j = col * 8; j < col * 8 + 4; ++j) {
-            B[j][i] = A[i][j];
+
+        for (int i = 0; i < 4; ++i) {
+            v0 = B[col * 8 + 0][row * 8 + i + 8];
+            v1 = B[col * 8 + 1][row * 8 + i + 8];
+            v2 = B[col * 8 + 2][row * 8 + i + 8];
+            v3 = B[col * 8 + 3][row * 8 + i + 8];
+
+            B[col * 8 + 0][row * 8 + i] = v0;
+            B[col * 8 + 1][row * 8 + i] = v1;
+            B[col * 8 + 2][row * 8 + i] = v2;
+            B[col * 8 + 3][row * 8 + i] = v3;
         }
-    }
-    for (int i = 60; i < 64; ++i) {
-        for (int j = col * 8 + 4; j < col * 8 + 8; ++j) {
-            B[j][i] = A[i][j];
+
+        for (int i = 0; i < 4; ++i) {
+            v0 = B[col * 8 + 0][row * 8 + i + 16];
+            v1 = B[col * 8 + 1][row * 8 + i + 16];
+            v2 = B[col * 8 + 2][row * 8 + i + 16];
+            v3 = B[col * 8 + 3][row * 8 + i + 16];
+
+            B[col * 8 + 0][row * 8 + i + 4] = v0;
+            B[col * 8 + 1][row * 8 + i + 4] = v1;
+            B[col * 8 + 2][row * 8 + i + 4] = v2;
+            B[col * 8 + 3][row * 8 + i + 4] = v3;
+        }
+
+        for (int i = 0; i < 4; ++i) {
+            v0 = B[col * 8 + 0][row * 8 + i + 12];
+            v1 = B[col * 8 + 1][row * 8 + i + 12];
+            v2 = B[col * 8 + 2][row * 8 + i + 12];
+            v3 = B[col * 8 + 3][row * 8 + i + 12];
+
+            B[col * 8 + 4][row * 8 + i] = v0;
+            B[col * 8 + 5][row * 8 + i] = v1;
+            B[col * 8 + 6][row * 8 + i] = v2;
+            B[col * 8 + 7][row * 8 + i] = v3;
+        }
+
+        for (int i = 0; i < 4; ++i) {
+            v0 = B[col * 8 + 0][row * 8 + i + 20];
+            v1 = B[col * 8 + 1][row * 8 + i + 20];
+            v2 = B[col * 8 + 2][row * 8 + i + 20];
+            v3 = B[col * 8 + 3][row * 8 + i + 20];
+
+            B[col * 8 + 4][row * 8 + i + 4] = v0;
+            B[col * 8 + 5][row * 8 + i + 4] = v1;
+            B[col * 8 + 6][row * 8 + i + 4] = v2;
+            B[col * 8 + 7][row * 8 + i + 4] = v3;
+        }
+    } else {
+        for (int i = 0; i < 4; ++i) {
+            v0 = A[row * 8 + i][col * 8 + 0];
+            v1 = A[row * 8 + i][col * 8 + 1];
+            v2 = A[row * 8 + i][col * 8 + 2];
+            v3 = A[row * 8 + i][col * 8 + 3];
+
+            v4 = A[row * 8 + i][col * 8 + 4];
+            v5 = A[row * 8 + i][col * 8 + 5];
+            v6 = A[row * 8 + i][col * 8 + 6];
+            v7 = A[row * 8 + i][col * 8 + 7];
+
+            B[col * 8 + 0][row * 8 + i - 4] = v0;
+            B[col * 8 + 1][row * 8 + i - 4] = v1;
+            B[col * 8 + 2][row * 8 + i - 4] = v2;
+            B[col * 8 + 3][row * 8 + i - 4] = v3;
+
+            B[col * 8 + 0][row * 8 + i - 8] = v4;
+            B[col * 8 + 1][row * 8 + i - 8] = v5;
+            B[col * 8 + 2][row * 8 + i - 8] = v6;
+            B[col * 8 + 3][row * 8 + i - 8] = v7;
+        }
+
+        for (int i = 0; i < 4; ++i) {
+            v0 = A[row * 8 + i + 4][col * 8 + 0];
+            v1 = A[row * 8 + i + 4][col * 8 + 1];
+            v2 = A[row * 8 + i + 4][col * 8 + 2];
+            v3 = A[row * 8 + i + 4][col * 8 + 3];
+
+            v4 = A[row * 8 + i + 4][col * 8 + 4];
+            v5 = A[row * 8 + i + 4][col * 8 + 5];
+            v6 = A[row * 8 + i + 4][col * 8 + 6];
+            v7 = A[row * 8 + i + 4][col * 8 + 7];
+
+            B[col * 8 + 0][row * 8 + i - 12] = v0;
+            B[col * 8 + 1][row * 8 + i - 12] = v1;
+            B[col * 8 + 2][row * 8 + i - 12] = v2;
+            B[col * 8 + 3][row * 8 + i - 12] = v3;
+
+            B[col * 8 + 0][row * 8 + i - 16] = v4;
+            B[col * 8 + 1][row * 8 + i - 16] = v5;
+            B[col * 8 + 2][row * 8 + i - 16] = v6;
+            B[col * 8 + 3][row * 8 + i - 16] = v7;
+        }
+
+        for (int i = 0; i < 4; ++i) {
+            v0 = B[col * 8 + 0][row * 8 + i - 4];
+            v1 = B[col * 8 + 1][row * 8 + i - 4];
+            v2 = B[col * 8 + 2][row * 8 + i - 4];
+            v3 = B[col * 8 + 3][row * 8 + i - 4];
+
+            B[col * 8 + 0][row * 8 + i] = v0;
+            B[col * 8 + 1][row * 8 + i] = v1;
+            B[col * 8 + 2][row * 8 + i] = v2;
+            B[col * 8 + 3][row * 8 + i] = v3;
+        }
+
+        for (int i = 0; i < 4; ++i) {
+            v0 = B[col * 8 + 0][row * 8 + i - 12];
+            v1 = B[col * 8 + 1][row * 8 + i - 12];
+            v2 = B[col * 8 + 2][row * 8 + i - 12];
+            v3 = B[col * 8 + 3][row * 8 + i - 12];
+
+            B[col * 8 + 0][row * 8 + i + 4] = v0;
+            B[col * 8 + 1][row * 8 + i + 4] = v1;
+            B[col * 8 + 2][row * 8 + i + 4] = v2;
+            B[col * 8 + 3][row * 8 + i + 4] = v3;
+        }
+
+        for (int i = 0; i < 4; ++i) {
+            v0 = B[col * 8 + 0][row * 8 + i - 8];
+            v1 = B[col * 8 + 1][row * 8 + i - 8];
+            v2 = B[col * 8 + 2][row * 8 + i - 8];
+            v3 = B[col * 8 + 3][row * 8 + i - 8];
+
+            B[col * 8 + 4][row * 8 + i] = v0;
+            B[col * 8 + 5][row * 8 + i] = v1;
+            B[col * 8 + 6][row * 8 + i] = v2;
+            B[col * 8 + 7][row * 8 + i] = v3;
+        }
+
+        for (int i = 0; i < 4; ++i) {
+            v0 = B[col * 8 + 0][row * 8 + i - 16];
+            v1 = B[col * 8 + 1][row * 8 + i - 16];
+            v2 = B[col * 8 + 2][row * 8 + i - 16];
+            v3 = B[col * 8 + 3][row * 8 + i - 16];
+
+            B[col * 8 + 4][row * 8 + i + 4] = v0;
+            B[col * 8 + 5][row * 8 + i + 4] = v1;
+            B[col * 8 + 6][row * 8 + i + 4] = v2;
+            B[col * 8 + 7][row * 8 + i + 4] = v3;
         }
     }
 }
