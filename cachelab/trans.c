@@ -69,7 +69,22 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N])
     }
 
     if (M == 61) {
+        int length = 17;
+        int width = 4;
+        int i, j, ii, jj;
 
+        for (i = 0; i < N; i += length) {
+            for (j = 0; j < M; j += width) {
+                int i_end = (i + length < N) ? i + length : N;
+                int j_end = (j + width < M) ? j + width : M;
+
+                for (ii = i; ii < i_end; ++ii) {
+                    for (jj = j; jj < j_end; ++jj) {
+                        B[jj][ii] = A[ii][jj];
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -412,8 +427,6 @@ void registerFunctions()
 {
     /* Register your solution function */
     registerTransFunction(transpose_submit, transpose_submit_desc); 
-
-
 }
 
 /* 
