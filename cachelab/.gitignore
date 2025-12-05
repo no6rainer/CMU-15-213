@@ -3,3 +3,7 @@
 test-trans
 tracegen
 trans.o
+.marker
+csim
+trace.f0
+trace.tmp
