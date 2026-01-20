@@ -13,6 +13,6 @@ My solutions and progress for the labs in the CMU 15-213 (Introduction to Comput
 | attacklab | ✅ Completed | / |
 | archlab | ✅ Completed | CPE: 7.03 |
 | cachelab | ✅ Completed | misses: 32×32 260, 64×64 1028, 61×67 1849 |
-| shlab | ❌ Not started | / |
+| shlab | ✅ Completed | / |
 | malloclab | ❌ Not started | / |
 | proxylab | ❌ Not started | / |
