@@ -41,14 +41,47 @@ team_t team = {
 /* rounds up to the nearest multiple of ALIGNMENT */
 #define ALIGN(size) (((size) + (ALIGNMENT-1)) & ~0x7)
 
-
 #define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
+
+#define GET(ptr) (*(__uint32_t*)(ptr))
+
+#define SET(ptr, val) (*(__uint32_t*)(ptr) = (val))
+
+#define GET_SIZE(ptr) (GET(ptr) & ~0x7)
+
+#define GET_FLAG(ptr) (GET(ptr) & 0x1)
+
+#define SET_FLAG(ptr, flag) (SET(ptr, GET(ptr) | (flag)))
+
+#define GET_PREV_PTR(ptr) ((char*)ptr + 4)
+
+#define GET_NEXT_PTR(ptr) ((char*)ptr + 8)
+
+#define GET_REM_PTR(ptr, size) ((char*)ptr + size + 16)
+
+void** lists = NULL;
+
+static inline int log2_ceil(unsigned int x)
+{
+    if (x <= 1) {
+        return 0;
+    }
+
+    return (int)(sizeof(unsigned int) * 8 - __builtin_clz(x - 1));
+}
 
 /* 
  * mm_init - initialize the malloc package.
  */
-int mm_init(void)
-{
+int mm_init(void) {
+    lists = mem_sbrk(16 * sizeof(void*));
+    if (lists == (void *)-1) {
+        return -1;
+    }
+
+    // lists[0] contains 8 bytes blocks, lists[1] contains 16, lists[2] contains 24-32
+
+    memset(lists, 0, 16 * sizeof(void *));
     return 0;
 }
 
@@ -58,13 +91,66 @@ int mm_init(void)
  */
 void *mm_malloc(size_t size)
 {
-    int newsize = ALIGN(size + SIZE_T_SIZE);
-    void *p = mem_sbrk(newsize);
-    if (p == (void *)-1)
-	return NULL;
-    else {
-        *(size_t *)p = size;
-        return (void *)((char *)p + SIZE_T_SIZE);
+    int malloc_size = ALIGN(size);
+    int index = log2_ceil(malloc_size / 8);
+    if (index > 15) {
+        index = 15;
+    }
+    
+    for (; index <= 15; ++index) {
+        void* curr = lists[index];
+
+        while (curr) {
+            int block_size = GET_SIZE(curr);
+
+            if (block_size >= malloc_size) {
+                SET_FLAG(curr, 0x1);
+
+                // cherry-pick the block from the list
+                void* prev = GET_PREV_PTR(curr);
+                void* next = GET_NEXT_PTR(curr);
+
+                void* prev_next = GET_NEXT_PTR(prev);
+                if (!next) {
+                    prev_next = NULL;
+                } else {
+                    prev_next = next;
+                }
+                
+                if (next) {
+                    void* next_prev = GET_PREV_PTR(next);
+                    next_prev = prev;
+                }
+
+                // slice the block if the remaining space is enough
+                if (block_size - malloc_size >= 16) {
+                    void* remaining_block = GET_REM_PTR(curr, malloc_size);
+                    int remaining_size = GET_SIZE(remaining_block);
+
+                    void* prev = GET_PREV_PTR(curr);
+                    void* next = GET_NEXT_PTR(curr);
+                }
+
+                CUT_THE_BLOCK_IF_NEEDED();
+                ADD_REMAINING_BLOCK_TO_ITS_LIST();
+                return PAYLOAD(curr);
+            } else {
+                curr = NEXT_BLOCK(curr);
+            }
+        }
+
+        // No fit in this list, switch to next list
+    }
+
+    // No fit in all of the lists, have to allocate new heap memory
+
+    int extend_size = max(newsize, PAGE_SIZE);
+    void* new_block = extend_heap(extend_size);
+
+    if (new_block == (void *)-1) {
+        return NULL;
+    } else {
+        return new_block;
     }
 }
 
@@ -94,11 +180,6 @@ void *mm_realloc(void *ptr, size_t size)
     mm_free(oldptr);
     return newptr;
 }
-
-
-
-
-
 
 
 
