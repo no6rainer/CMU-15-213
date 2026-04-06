@@ -113,14 +113,27 @@ static inline void init_block(void* block, int size, int prev_flag, int flag) {
 
 static inline void insert_block(void* block, int payload_size) {
     int index = get_index(payload_size);
+    int block_size = payload_size + WSIZE;
 
-    void* head = lists[index];
-    lists[index] = block;
-    SET_PREV_PTR(block, NULL);
-    SET_NEXT_PTR(block, head);
+    void* curr = lists[index];
+    void* prev = NULL;
 
-    if (head) {
-        SET_PREV_PTR(head, block);
+    while (curr != NULL && GET_SIZE(curr) < block_size) {
+        prev = curr;
+        curr = GET_NEXT_BLK(curr);
+    }
+
+    SET_PREV_PTR(block, prev);
+    SET_NEXT_PTR(block, curr);
+
+    if (prev) {
+        SET_NEXT_PTR(prev, block);
+    } else {
+        lists[index] = block; 
+    }
+
+    if (curr) {
+        SET_PREV_PTR(curr, block);
     }
 }
 
