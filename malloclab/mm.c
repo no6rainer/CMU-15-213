@@ -85,7 +85,7 @@ team_t team = {
 
 void** lists = NULL;
 
-static int log2_ceil(unsigned int x) {
+static inline int log2_ceil(unsigned int x) {
     if (x <= 1) {
         return 0;
     }
@@ -93,7 +93,7 @@ static int log2_ceil(unsigned int x) {
     return (int)(sizeof(unsigned int) * 8 - __builtin_clz(x - 1));
 }
 
-static int get_index(int payload_size) {
+static inline int get_index(int payload_size) {
     int index = log2_ceil((payload_size - 4) / 8);
     if (index > 15) {
         index = 15;
@@ -101,7 +101,7 @@ static int get_index(int payload_size) {
     return index;
 }
 
-static void init_block(void* block, int size, int prev_flag, int flag) {
+static inline void init_block(void* block, int size, int prev_flag, int flag) {
     void* header = block;
     SET_PACKED(block, size, prev_flag, flag);
 
@@ -111,7 +111,7 @@ static void init_block(void* block, int size, int prev_flag, int flag) {
     }
 }
 
-static void insert_block(void* block, int payload_size) {
+static inline void insert_block(void* block, int payload_size) {
     int index = get_index(payload_size);
 
     void* head = lists[index];
@@ -124,7 +124,7 @@ static void insert_block(void* block, int payload_size) {
     }
 }
 
-static void delete_block(void* block) {
+static inline void delete_block(void* block) {
     int payload_size = GET_SIZE(block) - WSIZE; 
     int index = get_index(payload_size);
 
@@ -142,7 +142,7 @@ static void delete_block(void* block) {
     }
 }
 
-static void* find_fit(int payload_size) {
+static inline void* find_fit(int payload_size) {
     int index = get_index(payload_size);
     int malloc_block_size = payload_size + WSIZE;
 
@@ -160,7 +160,7 @@ static void* find_fit(int payload_size) {
     return NULL;
 }
 
-static void set_next_physical_prev_flag(void* block, int offset, int prev_flag) {
+static inline void set_next_physical_prev_flag(void* block, int offset, int prev_flag) {
     void* next_physical = OFFSET(block, offset);
     
     void* next_physical_header = next_physical;
@@ -172,16 +172,14 @@ static void set_next_physical_prev_flag(void* block, int offset, int prev_flag) 
     }
 }
 
-static void* allocate_block(void* block, int payload_size) {
+static inline void place_block(void* block, int payload_size) {
     void* malloc_block = block;
     int curr_block_size = GET_SIZE(block);
     int malloc_block_size = payload_size + WSIZE;
-    
     int prev_flag = GET_PREV_FLAG(block);
 
-    delete_block(block);
-
     int rem_block_size = curr_block_size - malloc_block_size;
+    
     // slice the block if the remaining space is enough
     if (rem_block_size >= 4 * WSIZE) {
         init_block(malloc_block, malloc_block_size, prev_flag, ALLOC);
@@ -195,18 +193,22 @@ static void* allocate_block(void* block, int payload_size) {
         init_block(malloc_block, curr_block_size, prev_flag, ALLOC);
         set_next_physical_prev_flag(block, curr_block_size, ALLOC);
     }
-
-    return GET_PAYLOAD(malloc_block);
 }
 
-static void* get_prev_physical(void* block) {
+static inline void* allocate_block(void* block, int payload_size) {
+    delete_block(block);
+    place_block(block, payload_size);
+    return GET_PAYLOAD(block);
+}
+
+static inline void* get_prev_physical(void* block) {
     void* prev_physical_footer = OFFSET(block, -WSIZE);
     int prev_physical_size = GET_SIZE(prev_physical_footer);
     void* prev_physical = OFFSET(block, -prev_physical_size);
     return prev_physical;
 }
 
-static void* coalesce(void* block) {
+static inline void* coalesce(void* block) {
     int curr_block_size = GET_SIZE(block);
     int curr_payload_size = curr_block_size - WSIZE;
 
@@ -263,7 +265,7 @@ static void* coalesce(void* block) {
     }
 }
 
-static void* extend_heap(int extend_size) {
+static inline void* extend_heap(int extend_size) {
     void* epilogue = OFFSET(mem_heap_hi(), -3);
     int prev_flag = GET_PREV_FLAG(epilogue);
 
@@ -367,15 +369,81 @@ void mm_free(void* ptr) {
  * mm_realloc - Implemented simply in terms of mm_malloc and mm_free
  */
 void* mm_realloc(void* ptr, size_t size) {
-    void* oldptr = ptr;
-    void* newptr;
-    size_t copySize;
+    if (!ptr) {
+        return mm_malloc(size);
+    }
 
-    newptr = mm_malloc(size);
-    if (newptr == NULL) return NULL;
-    copySize = GET_SIZE(GET_BLOCK(oldptr)) - WSIZE;
-    if (size < copySize) copySize = size;
-    memcpy(newptr, oldptr, copySize);
-    mm_free(oldptr);
-    return newptr;
+    if (size == 0) {
+        mm_free(ptr);
+        return NULL;
+    }
+
+    void* old_payload = ptr;
+    void* old_block = GET_BLOCK(old_payload);
+    int old_block_size = GET_SIZE(old_block);
+
+    int new_payload_size = ALIGN_PAYLOAD(size);
+    if (new_payload_size < 3 * WSIZE) {
+        new_payload_size = 3 * WSIZE;
+    }
+    int new_block_size = new_payload_size + WSIZE;
+    
+    if (old_block_size >= new_block_size) {
+        place_block(old_block, new_payload_size);
+        return old_payload;
+
+    } else {
+        void* next_physical_block = OFFSET(old_block, old_block_size);
+        int next_physical_flag = GET_FLAG(next_physical_block);
+        int next_physical_size = GET_SIZE(next_physical_block);
+        int coalesced_size = old_block_size + next_physical_size;
+        
+        if (next_physical_flag == FREE && coalesced_size >= new_block_size) {
+            delete_block(next_physical_block);
+
+            int prev_flag = GET_PREV_FLAG(old_block);
+            init_block(old_block, coalesced_size, prev_flag, ALLOC);
+
+            place_block(old_block, new_payload_size);
+            return old_payload;
+        }
+
+        int is_at_end = 0;
+        if (next_physical_size == 0) {
+            is_at_end = 1;
+        } else if (next_physical_flag == FREE && GET_SIZE(OFFSET(next_physical_block, next_physical_size)) == 0) {
+            is_at_end = 1;
+        }
+
+        if (is_at_end) {
+            int available_size = old_block_size + (next_physical_flag == FREE ? next_physical_size : 0);
+            int extend_size = new_block_size - available_size;
+            extend_size = MAX(extend_size, PAGE_SIZE);
+
+            void* extended_block = extend_heap(extend_size);
+            if (extended_block) {
+                delete_block(extended_block);
+
+                int extended_block_size = GET_SIZE(extended_block);
+                int coalesced_size = old_block_size + extended_block_size;
+
+                int prev_flag = GET_PREV_FLAG(old_block);
+                init_block(old_block, coalesced_size, prev_flag, ALLOC);
+
+                place_block(old_block, new_payload_size);
+                return old_payload;
+            }
+        }
+    }
+
+    void* new_payload = mm_malloc(size);
+    if (!new_payload) {
+        return NULL;
+    }
+
+    int copy_size = old_block_size - WSIZE;
+    memcpy(new_payload, old_payload, copy_size);
+    mm_free(old_payload);
+
+    return new_payload;
 }
